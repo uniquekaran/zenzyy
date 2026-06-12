@@ -14,7 +14,140 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bookings: {
+        Row: {
+          adult_count: number
+          booking_code: string
+          child_count: number
+          created_at: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          id: string
+          park_id: string
+          status: string
+          ticket_data: Json
+          total_amount: number
+          user_id: string
+          visit_date: string
+        }
+        Insert: {
+          adult_count?: number
+          booking_code?: string
+          child_count?: number
+          created_at?: string
+          customer_email: string
+          customer_name: string
+          customer_phone: string
+          id?: string
+          park_id: string
+          status?: string
+          ticket_data?: Json
+          total_amount: number
+          user_id: string
+          visit_date: string
+        }
+        Update: {
+          adult_count?: number
+          booking_code?: string
+          child_count?: number
+          created_at?: string
+          customer_email?: string
+          customer_name?: string
+          customer_phone?: string
+          id?: string
+          park_id?: string
+          status?: string
+          ticket_data?: Json
+          total_amount?: number
+          user_id?: string
+          visit_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_park_id_fkey"
+            columns: ["park_id"]
+            isOneToOne: false
+            referencedRelation: "parks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      parks: {
+        Row: {
+          city: string
+          created_at: string
+          description: string
+          facilities: Json
+          gallery: Json
+          id: string
+          image_url: string
+          location: string
+          name: string
+          price: number
+          rating: number
+          rules: Json
+        }
+        Insert: {
+          city: string
+          created_at?: string
+          description: string
+          facilities?: Json
+          gallery?: Json
+          id?: string
+          image_url: string
+          location: string
+          name: string
+          price: number
+          rating?: number
+          rules?: Json
+        }
+        Update: {
+          city?: string
+          created_at?: string
+          description?: string
+          facilities?: Json
+          gallery?: Json
+          id?: string
+          image_url?: string
+          location?: string
+          name?: string
+          price?: number
+          rating?: number
+          rules?: Json
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id: string
+          name?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
