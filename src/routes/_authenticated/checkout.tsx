@@ -79,7 +79,7 @@ function Checkout() {
           customer_name: name,
           customer_email: email,
           customer_phone: phone,
-          ticket_data: { method, subtotal, taxes, adultPrice, childPrice, park_name: park.name },
+          ticket_data: { method, subtotal, taxes, adultPrice, childPrice, park_name: park!.name },
         })
         .select("id")
         .single();
