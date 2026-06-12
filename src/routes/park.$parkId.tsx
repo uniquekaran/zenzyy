@@ -52,9 +52,9 @@ function ParkDetail() {
   const adultPrice = Number(park.price);
   const childPrice = Math.round(adultPrice * 0.6);
   const total = adult * adultPrice + child * childPrice;
-  const gallery: string[] = Array.isArray(park.gallery) ? park.gallery : [park.image_url];
-  const facilities: string[] = Array.isArray(park.facilities) ? park.facilities : [];
-  const rules: string[] = Array.isArray(park.rules) ? park.rules : [];
+  const gallery = (Array.isArray(park.gallery) ? park.gallery : [park.image_url]) as string[];
+  const facilities = (Array.isArray(park.facilities) ? park.facilities : []) as string[];
+  const rules = (Array.isArray(park.rules) ? park.rules : []) as string[];
 
   function proceed() {
     if (!date || adult + child === 0) return;
