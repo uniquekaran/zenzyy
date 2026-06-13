@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useRef } from "react";
-import { CheckCircle2, Download, MapPin, CalendarDays, Users, Home } from "lucide-react";
+import { CheckCircle2, Clock, Download, MapPin, CalendarDays, Users, Home } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
@@ -30,7 +30,10 @@ function Success() {
 
   function downloadTicket() {
     if (!booking) return;
-    const text = `ZENZYY TICKET\n\nBooking: ${booking.booking_code}\nPark: ${(booking as any).parks?.name}\nLocation: ${(booking as any).parks?.location}\nDate: ${format(new Date(booking.visit_date), "EEE, MMM d, yyyy")}\nGuests: ${booking.adult_count} Adult, ${booking.child_count} Child\nTotal: ₹${Number(booking.total_amount).toLocaleString("en-IN")}\nName: ${booking.customer_name}\nEmail: ${booking.customer_email}\n\nShow this ticket at entry.`;
+    const statusLine = booking.status === "pending_verification"
+      ? "Status: Pending Verification"
+      : "Status: Confirmed";
+    const text = `ZENZYY TICKET\n\nBooking: ${booking.booking_code}\nPark: ${(booking as any).parks?.name}\nLocation: ${(booking as any).parks?.location}\nDate: ${format(new Date(booking.visit_date), "EEE, MMM d, yyyy")}\nGuests: ${booking.adult_count} Adult, ${booking.child_count} Child\nTotal: ₹${Number(booking.total_amount).toLocaleString("en-IN")}\nName: ${booking.customer_name}\nEmail: ${booking.customer_email}\n${statusLine}\n\nShow this ticket at entry.`;
     const blob = new Blob([text], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -42,6 +45,7 @@ function Success() {
   if (isLoading || !booking) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-2xl px-6 py-20 text-center">Loading ticket…</div></div>;
 
   const park = (booking as any).parks;
+  const isPending = booking.status === "pending_verification";
   const qrData = `ZENZYY|${booking.booking_code}|${booking.visit_date}|${booking.adult_count}A${booking.child_count}C`;
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrData)}&bgcolor=ffffff&color=0f3460`;
 
@@ -50,11 +54,17 @@ function Success() {
       <SiteHeader />
       <main className="mx-auto max-w-2xl w-full px-4 sm:px-6 py-10 flex-1">
         <div className="text-center">
-          <div className="mx-auto h-16 w-16 rounded-full bg-green-100 flex items-center justify-center animate-in zoom-in duration-500">
-            <CheckCircle2 className="h-9 w-9 text-green-600" />
+          <div className={`mx-auto h-16 w-16 rounded-full flex items-center justify-center animate-in zoom-in duration-500 ${isPending ? "bg-amber-100" : "bg-green-100"}`}>
+            {isPending ? <Clock className="h-9 w-9 text-amber-600" /> : <CheckCircle2 className="h-9 w-9 text-green-600" />}
           </div>
-          <h1 className="font-display text-3xl font-bold mt-4">Booking confirmed!</h1>
-          <p className="text-muted-foreground mt-1">Your QR ticket has been generated. See you at the park!</p>
+          <h1 className="font-display text-3xl font-bold mt-4">
+            {isPending ? "Booking submitted!" : "Booking confirmed!"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isPending
+              ? "Your payment is pending verification. We'll confirm your booking shortly."
+              : "Your QR ticket has been generated. See you at the park!"}
+          </p>
         </div>
 
         {/* Ticket */}
@@ -72,6 +82,13 @@ function Success() {
               <Field label="Name" value={booking.customer_name} />
               <Field label="Booking ID" value={booking.booking_code} mono />
               <Field label="Total paid" value={`₹${Number(booking.total_amount).toLocaleString("en-IN")}`} />
+              <Field
+                label="Status"
+                value={isPending ? "Pending Verification" : "Confirmed"}
+              />
+              {isPending && (booking as any).ticket_data?.utr && (
+                <Field label="UTR / Ref. No." value={(booking as any).ticket_data.utr} mono />
+              )}
             </div>
             <div className="flex flex-col items-center justify-center">
               <div className="rounded-2xl bg-white p-3 border border-border">
