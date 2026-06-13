@@ -24,7 +24,7 @@ export const Route = createFileRoute("/_authenticated/checkout")({
   component: Checkout,
 });
 
-const UPI_ID = "your-upi-id@ybl";
+const UPI_ID = "vworldcktd@naviaxis";
 
 function Checkout() {
   const search = Route.useSearch();
@@ -125,14 +125,12 @@ function Checkout() {
               <h2 className="font-display text-lg font-bold mb-4">UPI Payment</h2>
 
               <div className="flex flex-col items-center text-center">
-                {/* QR Placeholder */}
-                <div className="h-56 w-56 rounded-2xl bg-secondary border-2 border-dashed border-border flex items-center justify-center">
-                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                    <QrCode className="h-10 w-10" />
-                    <span className="text-xs">UPI QR Code</span>
-                  </div>
-                </div>
-
+                {/* Real QR Code */}
+<img 
+  src="/vworld.chitrakoot" 
+  alt="UPI QR Code" 
+  className="h-56 w-56 rounded-2xl object-cover bg-white p-2 border border-border" 
+/>
                 {/* UPI ID */}
                 <div className="mt-5 w-full max-w-sm">
                   <p className="text-sm text-muted-foreground">Scan to Pay or send to UPI ID:</p>
