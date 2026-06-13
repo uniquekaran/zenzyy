@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { CreditCard, Smartphone, Landmark, Lock, MapPin, CalendarDays, ArrowLeft } from "lucide-react";
+import { MapPin, CalendarDays, ArrowLeft, Copy, QrCode, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,8 @@ export const Route = createFileRoute("/_authenticated/checkout")({
   component: Checkout,
 });
 
+const UPI_ID = "your-upi-id@ybl";
+
 function Checkout() {
   const search = Route.useSearch();
   const navigate = useNavigate();
@@ -31,7 +33,8 @@ function Checkout() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [method, setMethod] = useState<"upi" | "card" | "netbanking">("upi");
+  const [utr, setUtr] = useState("");
+  const [copied, setCopied] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => { if (user?.email) setEmail(user.email); }, [user]);
@@ -53,19 +56,25 @@ function Checkout() {
   const taxes = Math.round(subtotal * 0.05);
   const total = subtotal + taxes;
 
+  function copyUpi() {
+    navigator.clipboard.writeText(UPI_ID);
+    setCopied(true);
+    toast.success("UPI ID copied!");
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   async function pay() {
     const schema = z.object({
       name: z.string().trim().min(2).max(80),
       email: z.string().trim().email().max(255),
       phone: z.string().trim().regex(/^[+\d][\d\s-]{7,15}$/, "Enter a valid phone number"),
+      utr: z.string().trim().regex(/^\d{12}$/, "Enter a valid 12-digit UTR number"),
     });
-    const parsed = schema.safeParse({ name, email, phone });
+    const parsed = schema.safeParse({ name, email, phone, utr });
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
 
     setSubmitting(true);
     try {
-      // mock payment delay
-      await new Promise((r) => setTimeout(r, 1200));
       const { data, error } = await supabase
         .from("bookings")
         .insert({
@@ -75,16 +84,16 @@ function Checkout() {
           adult_count: search.adult,
           child_count: search.child,
           total_amount: total,
-          status: "confirmed",
+          status: "pending_verification",
           customer_name: name,
           customer_email: email,
           customer_phone: phone,
-          ticket_data: { method, subtotal, taxes, adultPrice, childPrice, park_name: park!.name },
+          ticket_data: { method: "upi", utr, subtotal, taxes, adultPrice, childPrice, park_name: park!.name },
         })
         .select("id")
         .single();
       if (error) throw error;
-      toast.success("Payment successful!");
+      toast.success("Payment details submitted!");
       navigate({ to: "/success/$bookingId", params: { bookingId: data.id } });
     } catch (e: any) {
       toast.error(e.message || "Booking failed");
@@ -111,19 +120,51 @@ function Checkout() {
               </div>
             </div>
 
-            {/* Payment */}
+            {/* UPI Payment */}
             <div className="rounded-2xl bg-card border border-border p-6">
-              <h2 className="font-display text-lg font-bold mb-4">Payment method</h2>
-              <div className="grid sm:grid-cols-3 gap-3">
-                <MethodCard active={method === "upi"} onClick={() => setMethod("upi")} icon={Smartphone} label="UPI" sub="GPay, PhonePe..." />
-                <MethodCard active={method === "card"} onClick={() => setMethod("card")} icon={CreditCard} label="Card" sub="Credit / Debit" />
-                <MethodCard active={method === "netbanking"} onClick={() => setMethod("netbanking")} icon={Landmark} label="Net Banking" sub="All major banks" />
-              </div>
-              <div className="mt-5 rounded-xl border border-dashed border-border p-5 text-sm text-muted-foreground bg-secondary/30">
-                <p className="flex items-center gap-1.5"><Lock className="h-3.5 w-3.5 text-primary" /> Secure mock checkout — no real money will be charged.</p>
-                {method === "upi" && <p className="mt-2">Enter UPI ID like <code className="text-foreground">user@upi</code> in production.</p>}
-                {method === "card" && <p className="mt-2">Card details would be collected by Razorpay/Stripe iframe.</p>}
-                {method === "netbanking" && <p className="mt-2">You'd be redirected to your bank in production.</p>}
+              <h2 className="font-display text-lg font-bold mb-4">UPI Payment</h2>
+
+              <div className="flex flex-col items-center text-center">
+                {/* QR Placeholder */}
+                <div className="h-56 w-56 rounded-2xl bg-secondary border-2 border-dashed border-border flex items-center justify-center">
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <QrCode className="h-10 w-10" />
+                    <span className="text-xs">UPI QR Code</span>
+                  </div>
+                </div>
+
+                {/* UPI ID */}
+                <div className="mt-5 w-full max-w-sm">
+                  <p className="text-sm text-muted-foreground">Scan to Pay or send to UPI ID:</p>
+                  <button
+                    type="button"
+                    onClick={copyUpi}
+                    className="mt-2 w-full flex items-center justify-center gap-2 rounded-xl border border-border bg-secondary/50 px-4 py-3 text-base font-semibold transition hover:bg-secondary"
+                  >
+                    <span className="font-mono tracking-wide">{UPI_ID}</span>
+                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4 text-muted-foreground" />}
+                  </button>
+                </div>
+
+                {/* UTR Input */}
+                <div className="mt-6 w-full max-w-sm text-left">
+                  <Label htmlFor="utr" className="flex items-center gap-1">
+                    Enter 12-digit UTR / Transaction Reference Number
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="utr"
+                    className="mt-1.5 h-11 font-mono tracking-widest"
+                    maxLength={12}
+                    inputMode="numeric"
+                    value={utr}
+                    onChange={(e) => setUtr(e.target.value.replace(/\D/g, ""))}
+                    placeholder="0000 0000 0000"
+                  />
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Please complete the payment first, then enter the UTR number here to confirm your booking.
+                  </p>
+                </div>
               </div>
             </div>
           </div>
@@ -150,9 +191,8 @@ function Checkout() {
                 <span className="font-display text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
               </div>
               <Button onClick={pay} disabled={submitting} className="w-full mt-5 h-12 rounded-xl text-white font-semibold" style={{ background: "var(--gradient-aqua)" }}>
-                {submitting ? "Processing payment..." : `Pay ₹${total.toLocaleString("en-IN")}`}
+                {submitting ? "Submitting…" : "Submit Payment Details"}
               </Button>
-              <p className="text-xs text-center text-muted-foreground mt-3 flex items-center justify-center gap-1"><Lock className="h-3 w-3" /> 256-bit encrypted</p>
             </div>
           </div>
         </div>
@@ -163,15 +203,4 @@ function Checkout() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between"><span className="text-muted-foreground">{label}</span><span>{value}</span></div>;
-}
-
-function MethodCard({ active, onClick, icon: Icon, label, sub }: any) {
-  return (
-    <button type="button" onClick={onClick}
-      className={`text-left rounded-xl border-2 p-4 transition ${active ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"}`}>
-      <Icon className={`h-5 w-5 ${active ? "text-primary" : "text-muted-foreground"}`} />
-      <p className="font-semibold mt-2 text-sm">{label}</p>
-      <p className="text-xs text-muted-foreground">{sub}</p>
-    </button>
-  );
 }
