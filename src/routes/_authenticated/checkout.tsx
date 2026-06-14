@@ -51,8 +51,9 @@ function Checkout() {
 
   if (!park) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-3xl px-6 py-20 text-center"><p>Loading checkout…</p></div></div>;
 
-  const adultPrice = Number(park.price);
-  const childPrice = Math.round(adultPrice * 0.6);
+  const isVWorld = park.name?.toLowerCase().includes("v world");
+  const adultPrice = isVWorld ? 399 : Number(park.price);
+  const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
   const subtotal = search.adult * adultPrice + search.child * childPrice;
   const taxes = Math.round(subtotal * 0.05);
   const total = subtotal + taxes;
@@ -183,15 +184,21 @@ function Checkout() {
                 </div>
               </div>
               <div className="mt-5 pt-5 border-t border-border space-y-2 text-sm">
-                {search.adult > 0 && <Row label={`Adult × ${search.adult}`} value={`₹${(search.adult * adultPrice).toLocaleString("en-IN")}`} />}
-                {search.child > 0 && <Row label={`Child × ${search.child}`} value={`₹${(search.child * childPrice).toLocaleString("en-IN")}`} />}
+                {search.adult > 0 && <Row label={`Adult (Above 10 years) × ${search.adult}`} value={`₹${(search.adult * adultPrice).toLocaleString("en-IN")}`} />}
+                {search.child > 0 && <Row label={`Child (2-10 years) × ${search.child}`} value={`₹${(search.child * childPrice).toLocaleString("en-IN")}`} />}
                 <Row label="Taxes & fees" value={`₹${taxes.toLocaleString("en-IN")}`} />
               </div>
               <div className="mt-4 pt-4 border-t border-border flex items-baseline justify-between">
                 <span className="font-semibold">Total</span>
                 <span className="font-display text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
               </div>
-              <Button onClick={pay} disabled={submitting} className="w-full mt-5 h-12 rounded-xl text-white font-semibold" style={{ background: "var(--gradient-aqua)" }}>
+              {isVWorld && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Children below 2 years enter for FREE (No ticket required).</span>
+                </div>
+              )}
+              <Button onClick={pay} disabled={submitting} className="w-full mt-4 h-12 rounded-xl text-white font-semibold" style={{ background: "var(--gradient-aqua)" }}>
                 {submitting ? "Submitting…" : "Submit Payment Details"}
               </Button>
             </div>
