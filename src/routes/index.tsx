@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ParkCard, type Park } from "@/components/park-card";
+import { FeaturedPark } from "@/components/featured-park";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -43,6 +44,9 @@ function HomePage() {
           p.location.toLowerCase().includes(query.toLowerCase()),
       )
     : parks;
+
+  const featured = filtered.find((p) => /v\s*world/i.test(p.name));
+  const others = filtered.filter((p) => p !== featured);
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -117,10 +121,21 @@ function HomePage() {
           ) : filtered.length === 0 ? (
             <p className="text-center text-muted-foreground py-12">No parks found for "{query}". Try another city.</p>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filtered.map((p) => (
-                <ParkCard key={p.id} park={p} />
-              ))}
+            <div className="space-y-12">
+              {featured && <FeaturedPark park={featured} />}
+              {others.length > 0 && (
+                <div>
+                  <div className="mb-6 px-2">
+                    <h3 className="font-display text-2xl sm:text-3xl font-bold">Explore Other Water Parks</h3>
+                    <p className="text-muted-foreground mt-1 text-sm">More great escapes near you.</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {others.map((p) => (
+                      <ParkCard key={p.id} park={p} />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
