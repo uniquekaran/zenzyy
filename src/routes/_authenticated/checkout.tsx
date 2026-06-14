@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
+import upiQrAsset from "@/assets/upi-qr.jpeg.asset.json";
 
 type Search = { parkId: string; date: string; adult: number; child: number };
 
@@ -126,11 +127,13 @@ function Checkout() {
 
               <div className="flex flex-col items-center text-center">
                 {/* Real QR Code */}
-<img 
-  src="/vworld.chitrakoot" 
-  alt="UPI QR Code" 
-  className="h-56 w-56 rounded-2xl object-cover bg-white p-2 border border-border" 
-/>
+                <div className="rounded-2xl bg-white p-4 border border-border shadow-sm flex items-center justify-center">
+                  <img
+                    src={upiQrAsset.url}
+                    alt="UPI QR Code for vworldcktd@naviaxis"
+                    className="h-56 w-56 object-contain"
+                  />
+                </div>
                 {/* UPI ID */}
                 <div className="mt-5 w-full max-w-sm">
                   <p className="text-sm text-muted-foreground">Scan to Pay or send to UPI ID:</p>
