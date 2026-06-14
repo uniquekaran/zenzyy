@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   MapPin, Star, Wifi, UtensilsCrossed, Lock, ShowerHead, Car, HeartPulse, Waves,
-  CalendarIcon, Minus, Plus, ShieldCheck, ArrowLeft,
+  CalendarIcon, Minus, Plus, ShieldCheck, ArrowLeft, Info,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
@@ -49,8 +49,9 @@ function ParkDetail() {
   if (isLoading) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-7xl px-6 py-20 animate-pulse space-y-6"><div className="h-96 bg-muted rounded-3xl" /><div className="h-8 w-1/3 bg-muted rounded" /></div></div>;
   if (!park) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-7xl px-6 py-20 text-center"><p>Park not found.</p><Link to="/" className="text-primary">← Back home</Link></div></div>;
 
-  const adultPrice = Number(park.price);
-  const childPrice = Math.round(adultPrice * 0.6);
+  const isVWorld = park.name?.toLowerCase().includes("v world");
+  const adultPrice = isVWorld ? 399 : Number(park.price);
+  const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
   const total = adult * adultPrice + child * childPrice;
   const gallery = (Array.isArray(park.gallery) ? park.gallery : [park.image_url]) as string[];
   const facilities = (Array.isArray(park.facilities) ? park.facilities : []) as string[];
@@ -154,14 +155,19 @@ function ParkDetail() {
                 </Popover>
               </div>
 
-              <Counter label="Adult" sub={`₹${adultPrice} each`} value={adult} onChange={setAdult} min={0} />
-              <Counter label="Child" sub={`₹${childPrice} each (4–12 yrs)`} value={child} onChange={setChild} min={0} />
+              <Counter label="Adult (Above 10 years)" sub={`₹${adultPrice} per ticket`} value={adult} onChange={setAdult} min={0} />
+              <Counter label="Child (2-10 years)" sub={`₹${childPrice} per ticket`} value={child} onChange={setChild} min={0} />
 
               <div className="mt-5 pt-5 border-t border-border flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">Total</span>
                 <span className="font-display text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
               </div>
-
+              {isVWorld && (
+                <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+                  <Info className="h-4 w-4 shrink-0 mt-0.5" />
+                  <span>Children below 2 years enter for FREE (No ticket required).</span>
+                </div>
+              )}
               <Button
                 onClick={proceed}
                 disabled={adult + child === 0 || !date}
