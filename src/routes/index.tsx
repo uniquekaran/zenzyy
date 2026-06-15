@@ -49,7 +49,7 @@ function HomePage() {
   const others = filtered.filter((p) => p !== featured);
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col animate-fade-in">
       <SiteHeader />
       {/* HERO */}
       <section className="relative overflow-hidden" style={{ background: "var(--gradient-hero)" }}>
@@ -60,7 +60,7 @@ function HomePage() {
           </svg>
         </div>
         <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 pt-20 pb-32 text-white">
-          <div className="max-w-3xl">
+          <div className="max-w-3xl animate-fade-in">
             <span className="inline-flex items-center gap-2 rounded-full bg-white/15 backdrop-blur px-3 py-1 text-xs font-medium">
               <Sparkles className="h-3.5 w-3.5" /> Instant tickets · Skip the queues
             </span>
@@ -85,7 +85,7 @@ function HomePage() {
               </div>
               <Button
                 size="lg"
-                className="rounded-xl text-white"
+                className="rounded-xl text-white transition-all hover:scale-[1.03] active:scale-[0.98]"
                 style={{ background: "var(--gradient-aqua)" }}
                 onClick={() => document.getElementById("trending")?.scrollIntoView({ behavior: "smooth" })}
               >
