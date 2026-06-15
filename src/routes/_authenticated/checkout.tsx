@@ -53,10 +53,10 @@ function Checkout() {
 
   const isVWorld = park.name?.toLowerCase().includes("v world");
   const adultPrice = isVWorld ? 399 : Number(park.price);
+  const originalAdultPrice = isVWorld ? 500 : null;
   const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
   const subtotal = search.adult * adultPrice + search.child * childPrice;
-  const taxes = Math.round(subtotal * 0.05);
-  const total = subtotal + taxes;
+  const total = subtotal;
 
   function copyUpi() {
     navigator.clipboard.writeText(UPI_ID);
@@ -90,7 +90,7 @@ function Checkout() {
           customer_name: name,
           customer_email: email,
           customer_phone: phone,
-          ticket_data: { method: "upi", utr, subtotal, taxes, adultPrice, childPrice, park_name: park!.name },
+          ticket_data: { method: "upi", utr, subtotal, taxes: 0, adultPrice, childPrice, park_name: park!.name },
         })
         .select("id")
         .single();
@@ -103,7 +103,7 @@ function Checkout() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col bg-secondary/30">
+    <div className="min-h-screen flex flex-col bg-secondary/30 animate-fade-in">
       <SiteHeader />
       <div className="mx-auto max-w-6xl w-full px-4 sm:px-6 lg:px-8 py-8 flex-1">
         <Link to="/park/$parkId" params={{ parkId: search.parkId }} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
@@ -184,9 +184,27 @@ function Checkout() {
                 </div>
               </div>
               <div className="mt-5 pt-5 border-t border-border space-y-2 text-sm">
-                {search.adult > 0 && <Row label={`Adult (Above 10 years) × ${search.adult}`} value={`₹${(search.adult * adultPrice).toLocaleString("en-IN")}`} />}
+                {search.adult > 0 && (
+                  <Row
+                    label={`Adult (Above 10 years) × ${search.adult}`}
+                    value={
+                      <span className="flex items-center gap-2">
+                        {originalAdultPrice && (
+                          <span className="text-muted-foreground line-through text-xs">
+                            ₹{(search.adult * originalAdultPrice).toLocaleString("en-IN")}
+                          </span>
+                        )}
+                        <span>₹{(search.adult * adultPrice).toLocaleString("en-IN")}</span>
+                      </span>
+                    }
+                  />
+                )}
                 {search.child > 0 && <Row label={`Child (2-10 years) × ${search.child}`} value={`₹${(search.child * childPrice).toLocaleString("en-IN")}`} />}
-                <Row label="Taxes & fees" value={`₹${taxes.toLocaleString("en-IN")}`} />
+                {isVWorld && search.adult > 0 && (
+                  <div className="rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2 text-xs font-bold text-white shadow-sm flex items-center gap-1.5">
+                    🔥 Garmi Special Offer · Save 20%
+                  </div>
+                )}
               </div>
               <div className="mt-4 pt-4 border-t border-border flex items-baseline justify-between">
                 <span className="font-semibold">Total</span>
@@ -198,7 +216,7 @@ function Checkout() {
                   <span>Children below 2 years enter for FREE (No ticket required).</span>
                 </div>
               )}
-              <Button onClick={pay} disabled={submitting} className="w-full mt-4 h-12 rounded-xl text-white font-semibold" style={{ background: "var(--gradient-aqua)" }}>
+              <Button onClick={pay} disabled={submitting} className="w-full mt-4 h-12 rounded-xl text-white font-semibold transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]" style={{ background: "var(--gradient-aqua)" }}>
                 {submitting ? "Submitting…" : "Submit Payment Details"}
               </Button>
             </div>
@@ -209,6 +227,6 @@ function Checkout() {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return <div className="flex justify-between"><span className="text-muted-foreground">{label}</span><span>{value}</span></div>;
 }
