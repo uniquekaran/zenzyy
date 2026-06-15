@@ -63,16 +63,24 @@ export function FeaturedPark({ park }: { park: Park }) {
             </li>
           </ul>
 
+          {/* Offer badge */}
+          <div className="mt-6 inline-flex w-fit items-center gap-1.5 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-1.5 text-xs font-bold text-white shadow-md animate-fade-in">
+            🔥 Garmi Special Offer · Save 20%
+          </div>
+
           {/* CTA */}
-          <div className="mt-7 flex flex-wrap items-end justify-between gap-4">
+          <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
             <div>
               <span className="text-xs text-muted-foreground">Starting from</span>
-              <p className="font-display text-3xl font-extrabold text-primary">₹{park.price}</p>
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg text-muted-foreground line-through">₹500</span>
+                <p className="font-display text-3xl font-extrabold text-primary">₹399</p>
+              </div>
             </div>
             <Button
               asChild
               size="lg"
-              className="rounded-xl text-white shadow-lg hover:shadow-xl transition-shadow"
+              className="rounded-xl text-white shadow-lg transition-all hover:scale-[1.03] hover:shadow-xl active:scale-[0.98]"
               style={{ background: "var(--gradient-aqua)" }}
             >
               <Link to="/park/$parkId" params={{ parkId: park.id }}>
