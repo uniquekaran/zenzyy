@@ -51,6 +51,7 @@ function ParkDetail() {
 
   const isVWorld = park.name?.toLowerCase().includes("v world");
   const adultPrice = isVWorld ? 399 : Number(park.price);
+  const originalAdultPrice = isVWorld ? 500 : null;
   const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
   const total = adult * adultPrice + child * childPrice;
   const gallery = (Array.isArray(park.gallery) ? park.gallery : [park.image_url]) as string[];
@@ -71,7 +72,7 @@ function ParkDetail() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col animate-fade-in">
       <SiteHeader />
       <div className="mx-auto max-w-7xl w-full px-4 sm:px-6 lg:px-8 py-8">
         <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4">
@@ -129,10 +130,20 @@ function ParkDetail() {
               <div className="flex items-baseline justify-between">
                 <div>
                   <span className="text-xs text-muted-foreground">Starting from</span>
-                  <p className="font-display text-3xl font-bold text-primary">₹{adultPrice}</p>
+                  <div className="flex items-baseline gap-2">
+                    {originalAdultPrice && (
+                      <span className="text-base text-muted-foreground line-through">₹{originalAdultPrice}</span>
+                    )}
+                    <p className="font-display text-3xl font-bold text-primary">₹{adultPrice}</p>
+                  </div>
                 </div>
                 <span className="text-xs text-muted-foreground">per adult</span>
               </div>
+              {isVWorld && (
+                <div className="mt-3 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2 text-xs font-bold text-white shadow-sm text-center animate-fade-in">
+                  🔥 Garmi Special Offer · Save 20%
+                </div>
+              )}
 
               <div className="mt-5">
                 <label className="text-sm font-medium">Date of visit</label>
@@ -171,7 +182,7 @@ function ParkDetail() {
               <Button
                 onClick={proceed}
                 disabled={adult + child === 0 || !date}
-                className="w-full mt-4 h-12 rounded-xl text-white font-semibold shadow-[var(--shadow-soft)]"
+                className="w-full mt-4 h-12 rounded-xl text-white font-semibold shadow-[var(--shadow-soft)] transition-all hover:scale-[1.02] hover:shadow-lg active:scale-[0.98]"
                 style={{ background: "var(--gradient-aqua)" }}
               >
                 Proceed to Checkout
