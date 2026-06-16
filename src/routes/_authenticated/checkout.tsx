@@ -12,6 +12,9 @@ import { toast } from "sonner";
 import { z } from "zod";
 import { useAuth } from "@/hooks/use-auth";
 import upiQrAsset from "@/assets/upi-qr.jpeg.asset.json";
+import { useServerFn } from "@tanstack/react-start";
+import { sendTicketEmail } from "@/lib/notifications.functions";
+import { format as formatDate } from "date-fns";
 
 type Search = { parkId: string; date: string; adult: number; child: number };
 
@@ -31,6 +34,7 @@ function Checkout() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const sendEmail = useServerFn(sendTicketEmail);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -92,9 +96,24 @@ function Checkout() {
           customer_phone: phone,
           ticket_data: { method: "upi", utr, subtotal, taxes: 0, adultPrice, childPrice, park_name: park!.name },
         })
-        .select("id")
+        .select("id, booking_code")
         .single();
       if (error) throw error;
+      // Fire-and-forget ticket email (non-blocking for UX)
+      sendEmail({
+        data: {
+          to: email,
+          bookingCode: data.booking_code,
+          parkName: park!.name,
+          location: park!.location,
+          visitDate: formatDate(new Date(search.date), "EEE, MMM d, yyyy"),
+          adults: search.adult,
+          children: search.child,
+          total,
+          customerName: name,
+          utr,
+        },
+      }).catch((e) => console.warn("ticket email failed", e));
       toast.success("Payment details submitted!");
       navigate({ to: "/success/$bookingId", params: { bookingId: data.id } });
     } catch (e: any) {
