@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useServerFn } from "@tanstack/react-start";
+import { sendOtp as sendOtpFn, verifyOtp as verifyOtpFn } from "@/lib/notifications.functions";
 
 type Search = { redirect?: string };
 
@@ -21,6 +23,8 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const navigate = useNavigate();
   const { redirect } = useSearch({ from: "/auth" });
+  const sendOtpServer = useServerFn(sendOtpFn);
+  const verifyOtpServer = useServerFn(verifyOtpFn);
   const [tab, setTab] = useState<"phone" | "email">("phone");
   const [step, setStep] = useState<"input" | "otp">("input");
   const [phone, setPhone] = useState("");
@@ -82,10 +86,8 @@ function AuthPage() {
     if (!parsed.success) { toast.error(parsed.error.issues[0].message); return; }
     setLoading(true);
     try {
-      const formatted = phone.startsWith("+") ? phone.replace(/[\s-]/g, "") : "+91" + phone.replace(/\D/g, "").slice(-10);
-      const { error } = await supabase.auth.signInWithOtp({ phone: formatted });
-      if (error) throw error;
-      toast.success(`OTP sent to ${formatted}`);
+      const res = await sendOtpServer({ data: { phone } });
+      toast.success(`OTP sent to ${res.phone}`);
       setStep("otp");
     } catch (err: any) {
       toast.error(err.message || "Couldn't send OTP. Try email sign-in.");
@@ -96,8 +98,8 @@ function AuthPage() {
     if (otp.length !== 6) { toast.error("Enter the 6-digit OTP"); return; }
     setLoading(true);
     try {
-      const formatted = phone.startsWith("+") ? phone.replace(/[\s-]/g, "") : "+91" + phone.replace(/\D/g, "").slice(-10);
-      const { error } = await supabase.auth.verifyOtp({ phone: formatted, token: otp, type: "sms" });
+      const { email, token } = await verifyOtpServer({ data: { phone, code: otp } });
+      const { error } = await supabase.auth.verifyOtp({ email, token, type: "magiclink" });
       if (error) throw error;
       toast.success("Verified! Welcome to Zenzyy.");
       navigate({ to: redirect || "/dashboard" });
@@ -107,25 +109,45 @@ function AuthPage() {
   }
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-2">
-      <div className="hidden lg:flex relative items-center justify-center text-white p-12" style={{ background: "var(--gradient-hero)" }}>
+    <div className="min-h-screen grid lg:grid-cols-2 relative overflow-hidden">
+      {/* Ambient floating orbs (right side too) */}
+      <div className="pointer-events-none absolute inset-0 -z-10">
+        <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full opacity-40 blur-3xl animate-float-slow" style={{ background: "radial-gradient(circle, oklch(0.78 0.14 200), transparent 60%)" }} />
+        <div className="absolute top-1/3 -right-24 h-[28rem] w-[28rem] rounded-full opacity-30 blur-3xl animate-float-slower" style={{ background: "radial-gradient(circle, oklch(0.62 0.18 260), transparent 60%)" }} />
+      </div>
+
+      <div className="hidden lg:flex relative items-center justify-center text-white p-12 animate-gradient-shift" style={{ background: "linear-gradient(135deg, oklch(0.78 0.14 200) 0%, oklch(0.62 0.18 235) 50%, oklch(0.45 0.18 260) 100%)" }}>
         <div className="absolute inset-0 opacity-30 pointer-events-none">
           <svg className="absolute bottom-0 w-full" viewBox="0 0 1440 200" preserveAspectRatio="none">
             <path fill="white" fillOpacity="0.2" d="M0,128L80,138.7C160,149,320,171,480,160C640,149,800,107,960,101.3C1120,96,1280,128,1360,138.7L1440,149L1440,200L0,200Z" />
           </svg>
         </div>
-        <div className="relative max-w-md">
+        {/* Floating bubbles */}
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute top-20 left-16 h-3 w-3 rounded-full bg-white/40 animate-float-slow" />
+          <div className="absolute top-44 right-24 h-2 w-2 rounded-full bg-white/50 animate-float-slower" />
+          <div className="absolute bottom-32 left-32 h-4 w-4 rounded-full bg-white/30 animate-float-slow" />
+          <div className="absolute bottom-52 right-16 h-2.5 w-2.5 rounded-full bg-white/45 animate-float-slower" />
+        </div>
+        <div className="relative max-w-md animate-slide-up">
           <div className="flex items-center gap-2 mb-6">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 backdrop-blur"><Waves className="h-5 w-5" /></span>
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl glass-panel animate-glow-pulse"><Waves className="h-5 w-5" /></span>
             <span className="font-display text-2xl font-bold">Zenzyy</span>
           </div>
-          <h2 className="font-display text-4xl font-bold leading-tight">Your splash-day, sorted in seconds.</h2>
-          <p className="mt-4 text-white/85">Book India's best water parks with one tap. Instant QR tickets. Zero queues.</p>
+          <h2 className="font-display text-5xl font-extrabold leading-[1.05]">
+            Your splash-day,<br /><span className="shimmer-text">sorted in seconds.</span>
+          </h2>
+          <p className="mt-5 text-white/85 text-lg">Book India's best water parks with one tap. Instant QR tickets. Zero queues.</p>
+          <ul className="mt-8 space-y-3 text-sm">
+            {["🎟️ Instant confirmation","🌊 Verified parks across India","⚡ One-tap mobile OTP login"].map((t,i)=>(
+              <li key={i} className="flex items-center gap-3 rounded-xl glass-panel px-4 py-2.5" style={{animationDelay: `${0.1*i}s`}}>{t}</li>
+            ))}
+          </ul>
         </div>
       </div>
 
-      <div className="flex items-center justify-center p-6 sm:p-12 animate-fade-in">
-        <div className="w-full max-w-md">
+      <div className="flex items-center justify-center p-6 sm:p-12 relative">
+        <div className="w-full max-w-md animate-slide-up rounded-3xl border border-border/60 bg-card/80 backdrop-blur-xl shadow-[var(--shadow-card)] p-7 sm:p-9">
           {step === "otp" ? (
             <button onClick={() => { setStep("input"); setOtp(""); }} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors">
               <ArrowLeft className="h-4 w-4" /> Change number
