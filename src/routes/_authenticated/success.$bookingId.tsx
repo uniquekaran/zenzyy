@@ -28,18 +28,94 @@ function Success() {
     },
   });
 
-  function downloadTicket() {
+  async function downloadTicket() {
     if (!booking) return;
-    const statusLine = booking.status === "pending_verification"
-      ? "Status: Pending Verification"
-      : "Status: Confirmed";
-    const text = `ZENZYY TICKET\n\nBooking: ${booking.booking_code}\nPark: ${(booking as any).parks?.name}\nLocation: ${(booking as any).parks?.location}\nDate: ${format(new Date(booking.visit_date), "EEE, MMM d, yyyy")}\nGuests: ${booking.adult_count} Adult, ${booking.child_count} Child\nTotal: ₹${Number(booking.total_amount).toLocaleString("en-IN")}\nName: ${booking.customer_name}\nEmail: ${booking.customer_email}\n${statusLine}\n\nShow this ticket at entry.`;
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `${booking.booking_code}.txt`; a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Ticket downloaded");
+    try {
+      const { jsPDF } = await import("jspdf");
+      const doc = new jsPDF({ unit: "pt", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+      const margin = 40;
+      const isPendingLocal = booking.status === "pending_verification";
+
+      // Header band
+      doc.setFillColor(15, 52, 96);
+      doc.rect(0, 0, pageW, 110, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text("ZENZYY PASS", margin, 45);
+      doc.setFontSize(22);
+      doc.text(park?.name ?? "Water Park", margin, 75);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(11);
+      doc.text(park?.location ?? "", margin, 95);
+
+      // Body
+      doc.setTextColor(20, 20, 20);
+      let y = 150;
+      const rows: [string, string][] = [
+        ["Booking ID", booking.booking_code],
+        ["Name", booking.customer_name],
+        ["Email", booking.customer_email ?? ""],
+        ["Visit Date", format(new Date(booking.visit_date), "EEE, MMM d, yyyy")],
+        ["Guests", `${booking.adult_count} Adult${booking.child_count > 0 ? `, ${booking.child_count} Child` : ""}`],
+        ["Total Paid", `INR ${Number(booking.total_amount).toLocaleString("en-IN")}`],
+        ["Status", isPendingLocal ? "Pending Verification" : "Confirmed"],
+      ];
+      doc.setFontSize(11);
+      rows.forEach(([label, value]) => {
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(120, 120, 120);
+        doc.text(label, margin, y);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(20, 20, 20);
+        doc.text(String(value), margin + 130, y);
+        y += 24;
+      });
+
+      // QR code
+      try {
+        const res = await fetch(qrUrl);
+        const blob = await res.blob();
+        const dataUrl: string = await new Promise((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(r.result as string);
+          r.onerror = reject;
+          r.readAsDataURL(blob);
+        });
+        doc.addImage(dataUrl, "PNG", pageW - margin - 160, 150, 160, 160);
+        doc.setFontSize(9);
+        doc.setTextColor(120, 120, 120);
+        doc.text("Scan at entry", pageW - margin - 160 + 55, 325);
+      } catch {
+        // QR fetch failed — continue without it
+      }
+
+      y += 20;
+      doc.setDrawColor(220, 220, 220);
+      doc.line(margin, y, pageW - margin, y);
+      y += 30;
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(20, 20, 20);
+      doc.setFontSize(12);
+      doc.text("Instructions", margin, y);
+      y += 18;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      doc.setTextColor(80, 80, 80);
+      const lines = [
+        "Show this ticket (printed or on your phone) at the park entry gate.",
+        "Carry a valid photo ID. Children below 2 years enter free.",
+        "Ticket is non-transferable and valid only for the selected date.",
+      ];
+      lines.forEach((l) => { doc.text(l, margin, y); y += 16; });
+
+      doc.save(`${booking.booking_code}.pdf`);
+      toast.success("Ticket PDF downloaded");
+    } catch (e) {
+      console.error(e);
+      toast.error("Could not generate PDF");
+    }
   }
 
   if (isLoading || !booking) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-2xl px-6 py-20 text-center">Loading ticket…</div></div>;
