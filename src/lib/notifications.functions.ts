@@ -22,13 +22,47 @@ function normalizePhone(raw: string): string {
   return "+91" + digits;
 }
 
+function newRequestId(prefix: string): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function maskPhone(p: string): string {
+  const d = p.replace(/\D/g, "");
+  if (d.length < 4) return "***";
+  return `***${d.slice(-4)}`;
+}
+
+function maskEmail(e: string): string {
+  const [u, d] = e.split("@");
+  if (!d) return "***";
+  const head = u.slice(0, 2);
+  return `${head}***@${d}`;
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text.length > 500 ? text.slice(0, 500) + "…[truncated]" : text;
+  }
+}
+
+function logEvent(event: Record<string, unknown>) {
+  // Single-line JSON so it's grep-friendly in worker logs.
+  console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
+}
+
 export const sendOtp = createServerFn({ method: "POST" })
   .inputValidator((d: { phone: string }) =>
     z.object({ phone: z.string().min(10).max(15) }).parse(d),
   )
   .handler(async ({ data }) => {
     const apiKey = process.env.FAST2SMS_API_KEY;
-    if (!apiKey) throw new Error("SMS service not configured");
+    const requestId = newRequestId("sms");
+    if (!apiKey) {
+      logEvent({ scope: "fast2sms", event: "config_missing", requestId });
+      throw new Error("SMS service not configured");
+    }
     const phone = normalizePhone(data.phone);
     const localTen = phone.replace(/\D/g, "").slice(-10);
     const code = String(Math.floor(100000 + Math.random() * 900000));
@@ -36,10 +70,38 @@ export const sendOtp = createServerFn({ method: "POST" })
     const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${encodeURIComponent(
       apiKey,
     )}&route=otp&variables_values=${code}&numbers=${localTen}`;
-    const res = await fetch(url, { method: "GET" });
+    const startedAt = Date.now();
+    logEvent({
+      scope: "fast2sms",
+      event: "request",
+      requestId,
+      endpoint: "/dev/bulkV2",
+      phone: maskPhone(phone),
+    });
+    let res: Response;
+    try {
+      res = await fetch(url, { method: "GET" });
+    } catch (err) {
+      logEvent({
+        scope: "fast2sms",
+        event: "network_error",
+        requestId,
+        durationMs: Date.now() - startedAt,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      throw new Error("Couldn't send OTP. Please try again.");
+    }
     const text = await res.text();
+    logEvent({
+      scope: "fast2sms",
+      event: "response",
+      requestId,
+      status: res.status,
+      ok: res.ok,
+      durationMs: Date.now() - startedAt,
+      body: safeParse(text),
+    });
     if (!res.ok) {
-      console.error("Fast2SMS error:", res.status, text);
       throw new Error("Couldn't send OTP. Please try again.");
     }
 
@@ -128,8 +190,9 @@ export const sendTicketEmail = createServerFn({ method: "POST" })
   )
   .handler(async ({ data }) => {
     const apiKey = process.env.RESEND_API_KEY;
+    const requestId = newRequestId("eml");
     if (!apiKey) {
-      console.warn("RESEND_API_KEY not configured; skipping email");
+      logEvent({ scope: "resend", event: "config_missing", requestId });
       return { ok: false, skipped: true };
     }
     const html = `<!doctype html><html><body style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,sans-serif;color:#0f172a;">
@@ -158,23 +221,58 @@ export const sendTicketEmail = createServerFn({ method: "POST" })
       <div style="padding:14px 32px;background:#0f172a;color:#94a3b8;font-size:11px;text-align:center;">Zenzyy · Skip the lines. Dive right in.</div>
     </div></body></html>`;
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        from: "Zenzyy Tickets <onboarding@resend.dev>",
-        to: [data.to],
-        subject: "Your Zenzyy Waterpark Ticket Confirmation! 🎟️🌊",
-        html,
-      }),
+    const startedAt = Date.now();
+    logEvent({
+      scope: "resend",
+      event: "request",
+      requestId,
+      endpoint: "/emails",
+      to: maskEmail(data.to),
+      bookingCode: data.bookingCode,
+    });
+    let res: Response;
+    try {
+      res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Zenzyy Tickets <onboarding@resend.dev>",
+          to: [data.to],
+          subject: "Your Zenzyy Waterpark Ticket Confirmation! 🎟️🌊",
+          html,
+        }),
+      });
+    } catch (err) {
+      logEvent({
+        scope: "resend",
+        event: "network_error",
+        requestId,
+        durationMs: Date.now() - startedAt,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return { ok: false, error: "network_error" };
+    }
+    const text = await res.text();
+    const parsed = safeParse(text);
+    const providerId =
+      typeof parsed === "object" && parsed && "id" in parsed
+        ? (parsed as { id?: string }).id
+        : undefined;
+    logEvent({
+      scope: "resend",
+      event: "response",
+      requestId,
+      status: res.status,
+      ok: res.ok,
+      durationMs: Date.now() - startedAt,
+      providerId,
+      body: parsed,
     });
     if (!res.ok) {
-      const t = await res.text();
-      console.error("Resend error:", res.status, t);
-      return { ok: false, error: "email_failed" };
+      return { ok: false, error: "email_failed", requestId };
     }
-    return { ok: true };
+    return { ok: true, requestId, providerId };
   });
