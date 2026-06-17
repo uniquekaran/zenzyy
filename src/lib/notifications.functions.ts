@@ -52,6 +52,13 @@ function logEvent(event: Record<string, unknown>) {
   console.log(JSON.stringify({ ts: new Date().toISOString(), ...event }));
 }
 
+function fast2SmsFailureMessage(body: unknown): string {
+  const statusCode = typeof body === "object" && body && "status_code" in body ? Number((body as { status_code?: unknown }).status_code) : undefined;
+  if (statusCode === 999) return "SMS provider account needs a ₹100+ transaction before API SMS can be sent. Please use Google or email sign-in for now.";
+  if (statusCode === 996) return "SMS provider OTP verification is not complete yet. Please use Google or email sign-in for now.";
+  return "Couldn't send OTP. Please try Google or email sign-in.";
+}
+
 export const sendOtp = createServerFn({ method: "POST" })
   .inputValidator((d: { phone: string }) =>
     z.object({ phone: z.string().min(10).max(15) }).parse(d),
@@ -95,6 +102,7 @@ export const sendOtp = createServerFn({ method: "POST" })
       throw new Error("Couldn't send OTP. Please try again.");
     }
     const text = await res.text();
+    const body = safeParse(text);
     logEvent({
       scope: "fast2sms",
       event: "response",
@@ -102,10 +110,10 @@ export const sendOtp = createServerFn({ method: "POST" })
       status: res.status,
       ok: res.ok,
       durationMs: Date.now() - startedAt,
-      body: safeParse(text),
+      body,
     });
     if (!res.ok) {
-      throw new Error("Couldn't send OTP. Please try again.");
+      return { ok: false, phone, message: fast2SmsFailureMessage(body), requestId };
     }
 
     const session = await otpSession();
