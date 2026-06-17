@@ -67,9 +67,12 @@ export const sendOtp = createServerFn({ method: "POST" })
     const localTen = phone.replace(/\D/g, "").slice(-10);
     const code = String(Math.floor(100000 + Math.random() * 900000));
 
-    const url = `https://www.fast2sms.com/dev/bulkV2?authorization=${encodeURIComponent(
-      apiKey,
-    )}&route=otp&variables_values=${code}&numbers=${localTen}`;
+    // route=q (Quick SMS) works on unverified dev accounts.
+    // route=otp requires Fast2SMS website verification (status_code 996).
+    const message = `${code} is your Zenzyy verification code. Valid for 5 minutes.`;
+    const url =
+      `https://www.fast2sms.com/dev/bulkV2?authorization=${encodeURIComponent(apiKey)}` +
+      `&route=q&message=${encodeURIComponent(message)}&language=english&flash=0&numbers=${localTen}`;
     const startedAt = Date.now();
     logEvent({
       scope: "fast2sms",
