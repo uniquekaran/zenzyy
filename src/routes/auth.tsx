@@ -87,6 +87,10 @@ function AuthPage() {
     setLoading(true);
     try {
       const res = await sendOtpServer({ data: { phone } });
+      if (!res.ok) {
+        toast.error(res.message || "Couldn't send OTP. Try email sign-in.");
+        return;
+      }
       toast.success(`OTP sent to ${res.phone}`);
       setStep("otp");
     } catch (err: any) {
