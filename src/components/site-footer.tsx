@@ -1,4 +1,5 @@
 import { Waves, Twitter, Instagram, Facebook } from "lucide-react";
+import { Link } from "@tanstack/react-router";
 
 export function SiteFooter() {
   return (
@@ -38,6 +39,7 @@ export function SiteFooter() {
               <li><a href="#" className="hover:text-foreground">Help center</a></li>
               <li><a href="#" className="hover:text-foreground">Refund policy</a></li>
               <li><a href="#" className="hover:text-foreground">Terms</a></li>
+              <li><Link to="/connect" className="hover:text-foreground">Connect AI assistant</Link></li>
             </ul>
           </div>
         </div>
