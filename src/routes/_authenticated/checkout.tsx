@@ -1,8 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { MapPin, CalendarDays, ArrowLeft, Copy, Check, Info } from "lucide-react";
+import { MapPin, CalendarDays, ArrowLeft, Copy, Check, Info, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
@@ -14,9 +14,10 @@ import { useAuth } from "@/hooks/use-auth";
 import upiQrAsset from "@/assets/upi-qr.jpeg.asset.json";
 import { useServerFn } from "@tanstack/react-start";
 import { sendTicketEmail } from "@/lib/notifications.functions";
+import { createBookingFn, listAddons } from "@/lib/booking.functions";
 import { format as formatDate } from "date-fns";
 
-type Search = { parkId: string; date: string; adult: number; child: number };
+type Search = { parkId: string; date: string; adult: number; child: number; addons: string };
 
 export const Route = createFileRoute("/_authenticated/checkout")({
   validateSearch: (s: Record<string, unknown>): Search => ({
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/_authenticated/checkout")({
     date: String(s.date ?? ""),
     adult: Number(s.adult ?? 0),
     child: Number(s.child ?? 0),
+    addons: String(s.addons ?? ""),
   }),
   component: Checkout,
 });
@@ -35,6 +37,8 @@ function Checkout() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const sendEmail = useServerFn(sendTicketEmail);
+  const createBooking = useServerFn(createBookingFn);
+  const listAddonsFn = useServerFn(listAddons);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -53,14 +57,37 @@ function Checkout() {
     },
   });
 
+  const { data: addonsData } = useQuery({
+    queryKey: ["addons"],
+    queryFn: () => listAddonsFn(),
+  });
+  const addonCatalog = (addonsData?.addons ?? []) as Array<{
+    id: string; name: string; variant: string | null; price: number;
+  }>;
+
+  const addonLines = useMemo<Array<{ id: string; quantity: number }>>(() => {
+    if (!search.addons) return [];
+    return search.addons.split(",").map((s: string) => {
+      const [id, q] = s.split(":");
+      return { id, quantity: Math.max(1, Number(q) || 1) };
+    }).filter((l: { id: string; quantity: number }) => Boolean(l.id));
+  }, [search.addons]);
+
   if (!park) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-3xl px-6 py-20 text-center"><p>Loading checkout…</p></div></div>;
 
   const isVWorld = park.name?.toLowerCase().includes("v world");
   const adultPrice = isVWorld ? 399 : Number(park.price);
   const originalAdultPrice = isVWorld ? 500 : null;
   const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
-  const subtotal = search.adult * adultPrice + search.child * childPrice;
-  const total = subtotal;
+  const ticketSubtotal = search.adult * adultPrice + search.child * childPrice;
+  const addonSubtotal = addonLines.reduce((s: number, l: { id: string; quantity: number }) => {
+    const item = addonCatalog.find((c) => c.id === l.id);
+    return s + (item ? Number(item.price) * l.quantity : 0);
+  }, 0);
+  const subtotal = ticketSubtotal + addonSubtotal;
+  const totalGuests = search.adult + search.child;
+  const discountAmount = totalGuests >= 5 ? Math.round(subtotal * 0.1) : 0;
+  const total = subtotal - discountAmount;
 
   function copyUpi() {
     navigator.clipboard.writeText(UPI_ID);
@@ -81,41 +108,36 @@ function Checkout() {
 
     setSubmitting(true);
     try {
-      const { data, error } = await supabase
-        .from("bookings")
-        .insert({
-          user_id: user!.id,
-          park_id: search.parkId,
-          visit_date: search.date,
-          adult_count: search.adult,
-          child_count: search.child,
-          total_amount: total,
-          status: "pending_verification",
-          customer_name: name,
-          customer_email: email,
-          customer_phone: phone,
-          ticket_data: { method: "upi", utr, subtotal, taxes: 0, adultPrice, childPrice, park_name: park!.name },
-        })
-        .select("id, booking_code")
-        .single();
-      if (error) throw error;
+      const booking = await createBooking({
+        data: {
+          parkId: search.parkId,
+          visitDate: search.date,
+          adults: search.adult,
+          children: search.child,
+          addons: addonLines,
+          customerName: name,
+          customerEmail: email,
+          customerPhone: phone,
+          utr,
+        },
+      });
       // Fire-and-forget ticket email (non-blocking for UX)
       sendEmail({
         data: {
           to: email,
-          bookingCode: data.booking_code,
+          bookingCode: booking.bookingCode,
           parkName: park!.name,
           location: park!.location,
           visitDate: formatDate(new Date(search.date), "EEE, MMM d, yyyy"),
           adults: search.adult,
           children: search.child,
-          total,
+          total: booking.total,
           customerName: name,
           utr,
         },
       }).catch((e) => console.warn("ticket email failed", e));
       toast.success("Payment details submitted!");
-      navigate({ to: "/success/$bookingId", params: { bookingId: data.id } });
+      navigate({ to: "/success/$bookingId", params: { bookingId: booking.id } });
     } catch (e: any) {
       toast.error(e.message || "Booking failed");
     } finally { setSubmitting(false); }
@@ -219,6 +241,27 @@ function Checkout() {
                   />
                 )}
                 {search.child > 0 && <Row label={`Child (2-10 years) × ${search.child}`} value={`₹${(search.child * childPrice).toLocaleString("en-IN")}`} />}
+                {addonLines.map((l: { id: string; quantity: number }) => {
+                  const item = addonCatalog.find((c) => c.id === l.id);
+                  if (!item) return null;
+                  return (
+                    <Row
+                      key={l.id}
+                      label={`${item.name}${item.variant ? ` · ${item.variant}` : ""} × ${l.quantity}`}
+                      value={`₹${(Number(item.price) * l.quantity).toLocaleString("en-IN")}`}
+                    />
+                  );
+                })}
+                {discountAmount > 0 && (
+                  <Row
+                    label={
+                      <span className="flex items-center gap-1 text-green-600 font-medium">
+                        <Users className="h-3.5 w-3.5" /> Family &amp; Friends −10%
+                      </span>
+                    }
+                    value={<span className="text-green-600 font-medium">−₹{discountAmount.toLocaleString("en-IN")}</span>}
+                  />
+                )}
                 {isVWorld && search.adult > 0 && (
                   <div className="rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 px-3 py-2 text-xs font-bold text-white shadow-sm flex items-center gap-1.5">
                     🔥 Garmi Special Offer · Save 20%
@@ -246,6 +289,6 @@ function Checkout() {
   );
 }
 
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return <div className="flex justify-between"><span className="text-muted-foreground">{label}</span><span>{value}</span></div>;
+function Row({ label, value }: { label: React.ReactNode; value: React.ReactNode }) {
+  return <div className="flex justify-between gap-4"><span className="text-muted-foreground">{label}</span><span>{value}</span></div>;
 }

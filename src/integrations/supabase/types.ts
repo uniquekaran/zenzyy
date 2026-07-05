@@ -14,8 +14,80 @@ export type Database = {
   }
   public: {
     Tables: {
+      add_ons: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          name: string
+          price: number
+          type: string
+          variant: string | null
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name: string
+          price: number
+          type: string
+          variant?: string | null
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          name?: string
+          price?: number
+          type?: string
+          variant?: string | null
+        }
+        Relationships: []
+      }
+      booking_events: {
+        Row: {
+          booking_id: string
+          created_at: string
+          event_type: string
+          from_date: string | null
+          id: string
+          reason: string | null
+          to_date: string | null
+          user_id: string
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          event_type: string
+          from_date?: string | null
+          id?: string
+          reason?: string | null
+          to_date?: string | null
+          user_id: string
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          event_type?: string
+          from_date?: string | null
+          id?: string
+          reason?: string | null
+          to_date?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_events_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
+          addons: Json
           adult_count: number
           booking_code: string
           child_count: number
@@ -23,15 +95,20 @@ export type Database = {
           customer_email: string
           customer_name: string
           customer_phone: string
+          discount_amount: number
+          discount_reason: string | null
           id: string
+          original_visit_date: string | null
           park_id: string
           status: string
+          subtotal: number
           ticket_data: Json
           total_amount: number
           user_id: string
           visit_date: string
         }
         Insert: {
+          addons?: Json
           adult_count?: number
           booking_code?: string
           child_count?: number
@@ -39,15 +116,20 @@ export type Database = {
           customer_email: string
           customer_name: string
           customer_phone: string
+          discount_amount?: number
+          discount_reason?: string | null
           id?: string
+          original_visit_date?: string | null
           park_id: string
           status?: string
+          subtotal?: number
           ticket_data?: Json
           total_amount: number
           user_id: string
           visit_date: string
         }
         Update: {
+          addons?: Json
           adult_count?: number
           booking_code?: string
           child_count?: number
@@ -55,9 +137,13 @@ export type Database = {
           customer_email?: string
           customer_name?: string
           customer_phone?: string
+          discount_amount?: number
+          discount_reason?: string | null
           id?: string
+          original_visit_date?: string | null
           park_id?: string
           status?: string
+          subtotal?: number
           ticket_data?: Json
           total_amount?: number
           user_id?: string
