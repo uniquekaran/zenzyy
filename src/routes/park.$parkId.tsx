@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { format } from "date-fns";
 import {
   MapPin, Star, Wifi, UtensilsCrossed, Lock, ShowerHead, Car, HeartPulse, Waves,
-  CalendarIcon, Minus, Plus, ShieldCheck, ArrowLeft, Info,
+  CalendarIcon, Minus, Plus, ShieldCheck, ArrowLeft, Info, Users, Sparkles,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
@@ -12,7 +12,10 @@ import { SiteFooter } from "@/components/site-footer";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useServerFn } from "@tanstack/react-start";
+import { listAddons, getRushLevel } from "@/lib/booking.functions";
 
 export const Route = createFileRoute("/park/$parkId")({
   component: ParkDetail,
@@ -36,6 +39,25 @@ function ParkDetail() {
   const [date, setDate] = useState<Date | undefined>(() => {
     const d = new Date(); d.setDate(d.getDate() + 1); return d;
   });
+  const [addonQty, setAddonQty] = useState<Record<string, number>>({});
+
+  const listAddonsFn = useServerFn(listAddons);
+  const rushFn = useServerFn(getRushLevel);
+
+  const { data: addonsData } = useQuery({
+    queryKey: ["addons"],
+    queryFn: () => listAddonsFn(),
+  });
+  const addons = (addonsData?.addons ?? []) as Array<{
+    id: string; type: string; name: string; variant: string | null; price: number;
+  }>;
+
+  const dateKey = date ? format(date, "yyyy-MM-dd") : "";
+  const { data: rush } = useQuery({
+    queryKey: ["rush", parkId, dateKey],
+    enabled: !!dateKey,
+    queryFn: () => rushFn({ data: { parkId, date: dateKey } }),
+  });
 
   const { data: park, isLoading } = useQuery({
     queryKey: ["park", parkId],
@@ -53,13 +75,25 @@ function ParkDetail() {
   const adultPrice = isVWorld ? 399 : Number(park.price);
   const originalAdultPrice = isVWorld ? 500 : null;
   const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
-  const total = adult * adultPrice + child * childPrice;
+  const ticketSubtotal = adult * adultPrice + child * childPrice;
+  const addonLines = useMemo(
+    () => addons
+      .map((a) => ({ ...a, qty: addonQty[a.id] ?? 0 }))
+      .filter((a) => a.qty > 0),
+    [addons, addonQty],
+  );
+  const addonSubtotal = addonLines.reduce((s, l) => s + Number(l.price) * l.qty, 0);
+  const subtotal = ticketSubtotal + addonSubtotal;
+  const totalGuests = adult + child;
+  const discountAmount = totalGuests >= 5 ? Math.round(subtotal * 0.1) : 0;
+  const total = subtotal - discountAmount;
   const gallery = (Array.isArray(park.gallery) ? park.gallery : [park.image_url]) as string[];
   const facilities = (Array.isArray(park.facilities) ? park.facilities : []) as string[];
   const rules = (Array.isArray(park.rules) ? park.rules : []) as string[];
 
   function proceed() {
     if (!date || adult + child === 0) return;
+    const addonsParam = addonLines.map((l) => `${l.id}:${l.qty}`).join(",");
     navigate({
       to: "/checkout",
       search: {
@@ -67,9 +101,23 @@ function ParkDetail() {
         date: format(date, "yyyy-MM-dd"),
         adult,
         child,
+        addons: addonsParam,
       },
     });
   }
+
+  function setQty(id: string, n: number) {
+    setAddonQty((s) => {
+      const next = { ...s };
+      if (n <= 0) delete next[id];
+      else next[id] = Math.min(n, 20);
+      return next;
+    });
+  }
+
+  const costumes = addons.filter((a) => a.type === "costume");
+  const lockers = addons.filter((a) => a.type === "locker");
+  const food = addons.filter((a) => a.type === "food");
 
   return (
     <div className="min-h-screen flex flex-col animate-fade-in">
@@ -113,6 +161,31 @@ function ParkDetail() {
                 </div>
               ))}
             </div>
+
+            {addons.length > 0 && (
+              <div className="mt-10">
+                <div className="flex items-center gap-2 mb-4">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                  <h2 className="font-display text-xl font-bold">Add-ons & Combos</h2>
+                </div>
+                <Tabs defaultValue="costume">
+                  <TabsList>
+                    <TabsTrigger value="costume">Costumes</TabsTrigger>
+                    <TabsTrigger value="locker">Lockers</TabsTrigger>
+                    <TabsTrigger value="food">Food Combos</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="costume" className="mt-4">
+                    <AddonGrid items={costumes} qty={addonQty} setQty={setQty} />
+                  </TabsContent>
+                  <TabsContent value="locker" className="mt-4">
+                    <AddonGrid items={lockers} qty={addonQty} setQty={setQty} />
+                  </TabsContent>
+                  <TabsContent value="food" className="mt-4">
+                    <AddonGrid items={food} qty={addonQty} setQty={setQty} />
+                  </TabsContent>
+                </Tabs>
+              </div>
+            )}
 
             <h2 className="font-display text-xl font-bold mt-10 mb-4">Park rules</h2>
             <ul className="space-y-2">
@@ -164,14 +237,34 @@ function ParkDetail() {
                     />
                   </PopoverContent>
                 </Popover>
+                {rush && (
+                  <RushBadge level={rush.level} guests={rush.guests} />
+                )}
               </div>
 
               <Counter label="Adult (Above 10 years)" sub={`₹${adultPrice} per ticket`} value={adult} onChange={setAdult} min={0} />
               <Counter label="Child (2-10 years)" sub={`₹${childPrice} per ticket`} value={child} onChange={setChild} min={0} />
 
-              <div className="mt-5 pt-5 border-t border-border flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Total</span>
-                <span className="font-display text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
+              <div className="mt-5 pt-5 border-t border-border space-y-1.5 text-sm">
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Tickets</span><span>₹{ticketSubtotal.toLocaleString("en-IN")}</span>
+                </div>
+                {addonSubtotal > 0 && (
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Add-ons ({addonLines.reduce((n, l) => n + l.qty, 0)})</span>
+                    <span>₹{addonSubtotal.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                {discountAmount > 0 && (
+                  <div className="flex justify-between text-green-600 font-medium">
+                    <span className="flex items-center gap-1"><Users className="h-3.5 w-3.5" /> Family &amp; Friends −10%</span>
+                    <span>−₹{discountAmount.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between pt-2 border-t border-border">
+                  <span className="font-semibold">Total</span>
+                  <span className="font-display text-2xl font-bold">₹{total.toLocaleString("en-IN")}</span>
+                </div>
               </div>
               {isVWorld && (
                 <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
@@ -218,6 +311,62 @@ function Counter({ label, sub, value, onChange, min = 0 }: { label: string; sub:
           className="h-8 w-8 rounded-full border border-border flex items-center justify-center hover:bg-secondary"
         ><Plus className="h-3.5 w-3.5" /></button>
       </div>
+    </div>
+  );
+}
+
+function AddonGrid({ items, qty, setQty }: {
+  items: Array<{ id: string; name: string; variant: string | null; price: number }>;
+  qty: Record<string, number>;
+  setQty: (id: string, n: number) => void;
+}) {
+  if (items.length === 0) return <p className="text-sm text-muted-foreground">Coming soon.</p>;
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      {items.map((it) => {
+        const q = qty[it.id] ?? 0;
+        return (
+          <div key={it.id} className={cn(
+            "flex items-center justify-between gap-3 rounded-xl border p-3 transition",
+            q > 0 ? "border-primary bg-primary/5" : "border-border bg-card",
+          )}>
+            <div>
+              <p className="font-medium text-sm">{it.name}{it.variant ? ` · ${it.variant}` : ""}</p>
+              <p className="text-xs text-muted-foreground">₹{Number(it.price).toLocaleString("en-IN")}</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={q === 0}
+                onClick={() => setQty(it.id, q - 1)}
+                className="h-7 w-7 rounded-full border border-border flex items-center justify-center hover:bg-secondary disabled:opacity-40"
+              ><Minus className="h-3 w-3" /></button>
+              <span className="w-5 text-center text-sm font-semibold">{q}</span>
+              <button
+                type="button"
+                onClick={() => setQty(it.id, q + 1)}
+                className="h-7 w-7 rounded-full border border-border flex items-center justify-center hover:bg-secondary"
+              ><Plus className="h-3 w-3" /></button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RushBadge({ level, guests }: { level: "low" | "moderate" | "high"; guests: number }) {
+  const map = {
+    low:      { label: "Low rush",      dot: "bg-green-500",  ring: "bg-green-50 text-green-800 border-green-200" },
+    moderate: { label: "Moderate rush", dot: "bg-amber-500",  ring: "bg-amber-50 text-amber-900 border-amber-200" },
+    high:     { label: "High rush",     dot: "bg-red-500",    ring: "bg-red-50 text-red-800 border-red-200" },
+  } as const;
+  const cfg = map[level];
+  return (
+    <div className={cn("mt-2 flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium", cfg.ring)}>
+      <span className={cn("h-2 w-2 rounded-full animate-pulse", cfg.dot)} />
+      <span>{cfg.label}</span>
+      <span className="ml-auto opacity-70">{guests} guests booked</span>
     </div>
   );
 }
