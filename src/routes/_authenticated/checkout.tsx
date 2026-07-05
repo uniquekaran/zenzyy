@@ -65,12 +65,12 @@ function Checkout() {
     id: string; name: string; variant: string | null; price: number;
   }>;
 
-  const addonLines = useMemo(() => {
-    if (!search.addons) return [] as Array<{ id: string; quantity: number }>;
-    return search.addons.split(",").map((s) => {
+  const addonLines = useMemo<Array<{ id: string; quantity: number }>>(() => {
+    if (!search.addons) return [];
+    return search.addons.split(",").map((s: string) => {
       const [id, q] = s.split(":");
       return { id, quantity: Math.max(1, Number(q) || 1) };
-    }).filter((l) => l.id);
+    }).filter((l: { id: string; quantity: number }) => Boolean(l.id));
   }, [search.addons]);
 
   if (!park) return <div className="min-h-screen"><SiteHeader /><div className="mx-auto max-w-3xl px-6 py-20 text-center"><p>Loading checkout…</p></div></div>;
@@ -80,7 +80,7 @@ function Checkout() {
   const originalAdultPrice = isVWorld ? 500 : null;
   const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
   const ticketSubtotal = search.adult * adultPrice + search.child * childPrice;
-  const addonSubtotal = addonLines.reduce((s, l) => {
+  const addonSubtotal = addonLines.reduce((s: number, l: { id: string; quantity: number }) => {
     const item = addonCatalog.find((c) => c.id === l.id);
     return s + (item ? Number(item.price) * l.quantity : 0);
   }, 0);
@@ -241,7 +241,7 @@ function Checkout() {
                   />
                 )}
                 {search.child > 0 && <Row label={`Child (2-10 years) × ${search.child}`} value={`₹${(search.child * childPrice).toLocaleString("en-IN")}`} />}
-                {addonLines.map((l) => {
+                {addonLines.map((l: { id: string; quantity: number }) => {
                   const item = addonCatalog.find((c) => c.id === l.id);
                   if (!item) return null;
                   return (
