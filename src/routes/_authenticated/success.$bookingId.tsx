@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useRef } from "react";
-import { CheckCircle2, Clock, Download, MapPin, CalendarDays, Users, Home } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { CheckCircle2, Clock, Download, MapPin, CalendarDays, Users, Home, Sparkles } from "lucide-react";
 import { format } from "date-fns";
+import QRCode from "qrcode";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ export const Route = createFileRoute("/_authenticated/success/$bookingId")({
 function Success() {
   const { bookingId } = Route.useParams();
   const ticketRef = useRef<HTMLDivElement>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
 
   const { data: booking, isLoading } = useQuery({
     queryKey: ["booking", bookingId],
@@ -27,6 +29,16 @@ function Success() {
       return data;
     },
   });
+
+  useEffect(() => {
+    if (!booking) return;
+    const payload = `ZENZYY|${booking.booking_code}|${booking.visit_date}|${booking.adult_count}A${booking.child_count}C`;
+    QRCode.toDataURL(payload, {
+      width: 320,
+      margin: 1,
+      color: { dark: "#0f3460", light: "#ffffff" },
+    }).then(setQrDataUrl).catch(() => setQrDataUrl(""));
+  }, [booking]);
 
   async function downloadTicket() {
     if (!booking) return;
@@ -74,21 +86,13 @@ function Success() {
       });
 
       // QR code
-      try {
-        const res = await fetch(qrUrl);
-        const blob = await res.blob();
-        const dataUrl: string = await new Promise((resolve, reject) => {
-          const r = new FileReader();
-          r.onload = () => resolve(r.result as string);
-          r.onerror = reject;
-          r.readAsDataURL(blob);
-        });
-        doc.addImage(dataUrl, "PNG", pageW - margin - 160, 150, 160, 160);
-        doc.setFontSize(9);
-        doc.setTextColor(120, 120, 120);
-        doc.text("Scan at entry", pageW - margin - 160 + 55, 325);
-      } catch {
-        // QR fetch failed — continue without it
+      if (qrDataUrl) {
+        try {
+          doc.addImage(qrDataUrl, "PNG", pageW - margin - 160, 150, 160, 160);
+          doc.setFontSize(9);
+          doc.setTextColor(120, 120, 120);
+          doc.text("Scan at entry", pageW - margin - 160 + 55, 325);
+        } catch { /* ignore */ }
       }
 
       y += 20;
@@ -122,8 +126,12 @@ function Success() {
 
   const park = (booking as any).parks;
   const isPending = booking.status === "pending_verification";
-  const qrData = `ZENZYY|${booking.booking_code}|${booking.visit_date}|${booking.adult_count}A${booking.child_count}C`;
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrData)}&bgcolor=ffffff&color=0f3460`;
+  const isCancelled = booking.status === "cancelled";
+  const addons = (Array.isArray((booking as any).addons) ? (booking as any).addons : []) as Array<{
+    name: string; variant: string | null; quantity: number; total: number;
+  }>;
+  const discount = Number((booking as any).discount_amount ?? 0);
+  const subtotal = Number((booking as any).subtotal ?? booking.total_amount);
 
   return (
     <div className="min-h-screen flex flex-col bg-secondary/30">
@@ -134,12 +142,14 @@ function Success() {
             {isPending ? <Clock className="h-9 w-9 text-amber-600" /> : <CheckCircle2 className="h-9 w-9 text-green-600" />}
           </div>
           <h1 className="font-display text-3xl font-bold mt-4">
-            {isPending ? "Booking submitted!" : "Booking confirmed!"}
+            {isCancelled ? "Booking cancelled" : isPending ? "Booking submitted!" : "Booking confirmed!"}
           </h1>
           <p className="text-muted-foreground mt-1">
-            {isPending
-              ? "Your payment is pending verification. We'll confirm your booking shortly."
-              : "Your QR ticket has been generated. See you at the park!"}
+            {isCancelled
+              ? "This booking has been cancelled."
+              : isPending
+                ? "Your payment is pending verification. We'll confirm your booking shortly."
+                : "Your QR ticket has been generated. See you at the park!"}
           </p>
         </div>
 
@@ -167,12 +177,41 @@ function Success() {
               )}
             </div>
             <div className="flex flex-col items-center justify-center">
-              <div className="rounded-2xl bg-white p-3 border border-border">
-                <img src={qrUrl} alt="Booking QR" className="h-40 w-40" />
+              <div className="rounded-2xl bg-white p-3 border border-border shadow-sm">
+                {qrDataUrl ? (
+                  <img src={qrDataUrl} alt="Booking QR" className="h-40 w-40" />
+                ) : (
+                  <div className="h-40 w-40 bg-muted animate-pulse rounded" />
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-2">Scan at entry</p>
             </div>
           </div>
+
+          {(addons.length > 0 || discount > 0) && (
+            <div className="border-t border-dashed border-border px-6 pt-4 pb-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5" /> Add-ons &amp; savings
+              </p>
+              <div className="mt-2 space-y-1 text-sm">
+                {addons.map((a, i) => (
+                  <div key={i} className="flex justify-between">
+                    <span className="text-muted-foreground">{a.name}{a.variant ? ` · ${a.variant}` : ""} × {a.quantity}</span>
+                    <span>₹{Number(a.total).toLocaleString("en-IN")}</span>
+                  </div>
+                ))}
+                {discount > 0 && (
+                  <div className="flex justify-between text-green-600 font-medium">
+                    <span>Family &amp; Friends discount</span>
+                    <span>−₹{discount.toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-xs text-muted-foreground pt-1 border-t border-border mt-1">
+                  <span>Subtotal</span><span>₹{subtotal.toLocaleString("en-IN")}</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="border-t border-dashed border-border p-5 flex flex-wrap gap-3">
             <Button onClick={downloadTicket} className="flex-1 rounded-xl text-white" style={{ background: "var(--gradient-aqua)" }}>
