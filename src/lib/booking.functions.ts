@@ -47,6 +47,15 @@ const AddonLine = z.object({
   quantity: z.number().int().min(1).max(50),
 });
 
+const TransportSchema = z
+  .object({
+    code: z.string().min(1).max(30),
+    pickup: z.string().trim().min(1).max(120),
+    distanceKm: z.number().min(0).max(500),
+    fare: z.number().min(0).max(50000),
+  })
+  .optional();
+
 export const createBookingFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d: {
@@ -59,6 +68,10 @@ export const createBookingFn = createServerFn({ method: "POST" })
     customerEmail: string;
     customerPhone: string;
     utr?: string;
+    tierCode?: string;
+    transport?: { code: string; pickup: string; distanceKm: number; fare: number };
+    walletApply?: number;
+    referralCode?: string;
   }) =>
     z
       .object({
@@ -71,6 +84,10 @@ export const createBookingFn = createServerFn({ method: "POST" })
         customerEmail: z.string().trim().email().max(255),
         customerPhone: z.string().trim().min(7).max(20),
         utr: z.string().trim().optional(),
+        tierCode: z.string().trim().max(30).optional(),
+        transport: TransportSchema,
+        walletApply: z.number().min(0).max(100000).optional(),
+        referralCode: z.string().trim().max(30).optional(),
       })
       .refine((v) => v.adults + v.children > 0, { message: "Add at least one guest" })
       .parse(d),
@@ -86,9 +103,25 @@ export const createBookingFn = createServerFn({ method: "POST" })
       .maybeSingle();
     if (parkErr || !park) throw new Error("Park not found");
 
+    // Ticket tier lookup
+    const tierCode = data.tierCode ?? "standard";
+    const { data: tier } = await supabase
+      .from("ticket_tiers")
+      .select("code,name,adult_price,child_price")
+      .eq("code", tierCode)
+      .eq("active", true)
+      .maybeSingle();
     const isVWorld = park.name?.toLowerCase().includes("v world");
-    const adultPrice = isVWorld ? 399 : Number(park.price);
-    const childPrice = isVWorld ? 299 : Math.round(adultPrice * 0.6);
+    const adultPrice = tier
+      ? Number(tier.adult_price)
+      : isVWorld
+        ? 399
+        : Number(park.price);
+    const childPrice = tier
+      ? Number(tier.child_price)
+      : isVWorld
+        ? 299
+        : Math.round(adultPrice * 0.6);
     const ticketSubtotal = data.adults * adultPrice + data.children * childPrice;
 
     // Load add-ons for pricing
@@ -119,7 +152,30 @@ export const createBookingFn = createServerFn({ method: "POST" })
       }
     }
 
-    const subtotal = ticketSubtotal + addonSubtotal;
+    // Transport fare (server recompute for safety)
+    let transportFare = 0;
+    let transportSnapshot: any = {};
+    if (data.transport) {
+      const { data: opt } = await supabase
+        .from("transport_options")
+        .select("code,name,base_fare,per_km")
+        .eq("code", data.transport.code)
+        .maybeSingle();
+      if (opt) {
+        transportFare = Math.round(
+          Number(opt.base_fare) + Number(opt.per_km) * Math.max(0, data.transport.distanceKm),
+        );
+        transportSnapshot = {
+          code: opt.code,
+          name: opt.name,
+          pickup: data.transport.pickup,
+          distanceKm: data.transport.distanceKm,
+          fare: transportFare,
+        };
+      }
+    }
+
+    const subtotal = ticketSubtotal + addonSubtotal + transportFare;
     const totalGuests = data.adults + data.children;
     let discountAmount = 0;
     let discountReason: string | null = null;
@@ -127,7 +183,21 @@ export const createBookingFn = createServerFn({ method: "POST" })
       discountAmount = Math.round(subtotal * 0.1);
       discountReason = "Family & Friends discount (5+ guests, 10% off)";
     }
-    const total = subtotal - discountAmount;
+
+    // Wallet apply — clamp to available balance and to remaining total
+    let walletApplied = 0;
+    if (data.walletApply && data.walletApply > 0) {
+      const { data: w } = await supabase
+        .from("wallet_accounts")
+        .select("balance")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const balance = Number(w?.balance ?? 0);
+      const maxApply = Math.max(0, subtotal - discountAmount);
+      walletApplied = Math.min(Math.floor(data.walletApply), Math.floor(balance), Math.floor(maxApply));
+    }
+
+    const total = Math.max(0, subtotal - discountAmount - walletApplied);
 
     const status = data.utr ? "pending_verification" : "confirmed";
 
@@ -144,6 +214,10 @@ export const createBookingFn = createServerFn({ method: "POST" })
         discount_amount: discountAmount,
         discount_reason: discountReason,
         addons: addonSnapshot,
+        tier_code: tierCode,
+        transport: transportSnapshot,
+        wallet_applied: walletApplied,
+        referral_code_used: data.referralCode ?? null,
         status,
         customer_name: data.customerName,
         customer_email: data.customerEmail,
@@ -155,12 +229,81 @@ export const createBookingFn = createServerFn({ method: "POST" })
           childPrice,
           ticketSubtotal,
           addonSubtotal,
+          transportFare,
           park_name: park.name,
+          tier: tier?.name ?? "Standard Entry",
         },
       })
       .select("id,booking_code")
       .single();
     if (insErr || !booking) throw new Error(insErr?.message ?? "Booking failed");
+
+    // Debit wallet
+    if (walletApplied > 0) {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: w } = await supabaseAdmin
+        .from("wallet_accounts")
+        .select("balance")
+        .eq("user_id", userId)
+        .maybeSingle();
+      const newBal = Math.max(0, Number(w?.balance ?? 0) - walletApplied);
+      await supabaseAdmin.from("wallet_accounts").update({ balance: newBal }).eq("user_id", userId);
+      await supabaseAdmin.from("wallet_transactions").insert({
+        user_id: userId,
+        amount: -walletApplied,
+        type: "debit",
+        reason: `Applied to booking ${booking.booking_code}`,
+        booking_id: booking.id,
+      });
+    }
+
+    // Referral credit (first booking only)
+    if (data.referralCode && data.referralCode.trim().length > 0) {
+      try {
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const { data: refAcct } = await supabaseAdmin
+          .from("wallet_accounts")
+          .select("user_id")
+          .eq("referral_code", data.referralCode.trim().toUpperCase())
+          .maybeSingle();
+        if (refAcct && refAcct.user_id !== userId) {
+          // has this user already been credited before?
+          const { data: existing } = await supabaseAdmin
+            .from("referrals")
+            .select("id,status")
+            .eq("referred_id", userId)
+            .maybeSingle();
+          if (!existing) {
+            const CREDIT = 100;
+            const { data: refWallet } = await supabaseAdmin
+              .from("wallet_accounts")
+              .select("balance")
+              .eq("user_id", refAcct.user_id)
+              .maybeSingle();
+            const newBal = Number(refWallet?.balance ?? 0) + CREDIT;
+            await supabaseAdmin
+              .from("wallet_accounts")
+              .update({ balance: newBal })
+              .eq("user_id", refAcct.user_id);
+            await supabaseAdmin.from("wallet_transactions").insert({
+              user_id: refAcct.user_id,
+              amount: CREDIT,
+              type: "credit",
+              reason: `Referral credit — friend booked (${booking.booking_code})`,
+              booking_id: booking.id,
+            });
+            await supabaseAdmin.from("referrals").insert({
+              referrer_id: refAcct.user_id,
+              referred_id: userId,
+              status: "credited",
+              credited_at: new Date().toISOString(),
+            });
+          }
+        }
+      } catch (e) {
+        console.warn("referral credit failed", e);
+      }
+    }
 
     return {
       id: booking.id,
@@ -168,6 +311,8 @@ export const createBookingFn = createServerFn({ method: "POST" })
       subtotal,
       discountAmount,
       discountReason,
+      walletApplied,
+      transportFare,
       total,
     };
   });
