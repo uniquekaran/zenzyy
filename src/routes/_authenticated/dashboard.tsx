@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { format } from "date-fns";
 import { useServerFn } from "@tanstack/react-start";
 import { rescheduleBookingFn, cancelBookingFn } from "@/lib/booking.functions";
+import { getMyWallet } from "@/lib/wallet.functions";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -25,6 +26,13 @@ function Dashboard() {
   const qc = useQueryClient();
   const reschedule = useServerFn(rescheduleBookingFn);
   const cancel = useServerFn(cancelBookingFn);
+  const walletFn = useServerFn(getMyWallet);
+
+  const { data: wallet } = useQuery({
+    queryKey: ["my-wallet", user?.id],
+    enabled: !!user,
+    queryFn: () => walletFn(),
+  });
 
   const [reschedTarget, setReschedTarget] = useState<any | null>(null);
   const [reschedDate, setReschedDate] = useState<Date | undefined>();
@@ -93,6 +101,38 @@ function Dashboard() {
           </div>
           <Button variant="outline" onClick={signOut}><LogOut className="h-4 w-4 mr-2" /> Sign out</Button>
         </div>
+
+        {wallet && (
+          <div className="mt-6 rounded-2xl p-5 text-white shadow-[var(--shadow-card)]" style={{ background: "var(--gradient-aqua)" }}>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-widest opacity-80">Zenzyy Cash Wallet</p>
+                <p className="font-display text-3xl font-bold mt-1">₹{wallet.balance.toLocaleString("en-IN")}</p>
+                <p className="text-xs opacity-80 mt-1">Refer a friend — you both get ₹100 on their first booking.</p>
+              </div>
+              <div className="rounded-xl bg-white/15 backdrop-blur px-4 py-3 text-center">
+                <p className="text-[10px] uppercase opacity-80">Your referral code</p>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(wallet.referralCode); toast.success("Referral code copied!"); }}
+                  className="font-mono font-bold text-xl tracking-wider hover:opacity-80"
+                >{wallet.referralCode}</button>
+              </div>
+            </div>
+            {wallet.transactions.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-white/20 text-sm">
+                <p className="text-xs uppercase opacity-80 mb-2">Recent activity</p>
+                <div className="space-y-1">
+                  {wallet.transactions.slice(0, 3).map((t: any) => (
+                    <div key={t.id} className="flex justify-between text-xs">
+                      <span className="opacity-90">{t.reason}</span>
+                      <span className={t.type === "credit" ? "font-semibold" : "opacity-80"}>{t.type === "credit" ? "+" : ""}₹{Math.abs(Number(t.amount)).toLocaleString("en-IN")}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <Tabs defaultValue="active" className="mt-8">
           <TabsList>
