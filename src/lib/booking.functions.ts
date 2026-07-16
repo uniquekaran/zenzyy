@@ -241,7 +241,6 @@ export const createBookingFn = createServerFn({ method: "POST" })
     // Debit wallet
     if (walletApplied > 0) {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      await supabaseAdmin.rpc("noop").catch(() => {}); // ignore, we do updates instead
       const { data: w } = await supabaseAdmin
         .from("wallet_accounts")
         .select("balance")
