@@ -100,12 +100,16 @@ export type Database = {
           id: string
           original_visit_date: string | null
           park_id: string
+          referral_code_used: string | null
           status: string
           subtotal: number
           ticket_data: Json
+          tier_code: string
           total_amount: number
+          transport: Json
           user_id: string
           visit_date: string
+          wallet_applied: number
         }
         Insert: {
           addons?: Json
@@ -121,12 +125,16 @@ export type Database = {
           id?: string
           original_visit_date?: string | null
           park_id: string
+          referral_code_used?: string | null
           status?: string
           subtotal?: number
           ticket_data?: Json
+          tier_code?: string
           total_amount: number
+          transport?: Json
           user_id: string
           visit_date: string
+          wallet_applied?: number
         }
         Update: {
           addons?: Json
@@ -142,16 +150,100 @@ export type Database = {
           id?: string
           original_visit_date?: string | null
           park_id?: string
+          referral_code_used?: string | null
           status?: string
           subtotal?: number
           ticket_data?: Json
+          tier_code?: string
           total_amount?: number
+          transport?: Json
           user_id?: string
           visit_date?: string
+          wallet_applied?: number
         }
         Relationships: [
           {
             foreignKeyName: "bookings_park_id_fkey"
+            columns: ["park_id"]
+            isOneToOne: false
+            referencedRelation: "parks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chatbot_faqs: {
+        Row: {
+          answer: string
+          created_at: string
+          id: string
+          keywords: string[]
+          question: string
+          sort_order: number
+        }
+        Insert: {
+          answer: string
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          question: string
+          sort_order?: number
+        }
+        Update: {
+          answer?: string
+          created_at?: string
+          id?: string
+          keywords?: string[]
+          question?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
+      park_zones: {
+        Row: {
+          avg_wait_minutes: number
+          created_at: string
+          height_min_cm: number | null
+          icon: string | null
+          id: string
+          name: string
+          park_id: string
+          safety_notes: string | null
+          weight_max_kg: number | null
+          x_pct: number
+          y_pct: number
+          zone_type: string
+        }
+        Insert: {
+          avg_wait_minutes?: number
+          created_at?: string
+          height_min_cm?: number | null
+          icon?: string | null
+          id?: string
+          name: string
+          park_id: string
+          safety_notes?: string | null
+          weight_max_kg?: number | null
+          x_pct?: number
+          y_pct?: number
+          zone_type: string
+        }
+        Update: {
+          avg_wait_minutes?: number
+          created_at?: string
+          height_min_cm?: number | null
+          icon?: string | null
+          id?: string
+          name?: string
+          park_id?: string
+          safety_notes?: string | null
+          weight_max_kg?: number | null
+          x_pct?: number
+          y_pct?: number
+          zone_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "park_zones_park_id_fkey"
             columns: ["park_id"]
             isOneToOne: false
             referencedRelation: "parks"
@@ -168,7 +260,9 @@ export type Database = {
           gallery: Json
           id: string
           image_url: string
+          latitude: number | null
           location: string
+          longitude: number | null
           name: string
           price: number
           rating: number
@@ -182,7 +276,9 @@ export type Database = {
           gallery?: Json
           id?: string
           image_url: string
+          latitude?: number | null
           location: string
+          longitude?: number | null
           name: string
           price: number
           rating?: number
@@ -196,7 +292,9 @@ export type Database = {
           gallery?: Json
           id?: string
           image_url?: string
+          latitude?: number | null
           location?: string
+          longitude?: number | null
           name?: string
           price?: number
           rating?: number
@@ -234,15 +332,249 @@ export type Database = {
         }
         Relationships: []
       }
+      referrals: {
+        Row: {
+          created_at: string
+          credited_at: string | null
+          id: string
+          referred_id: string
+          referrer_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          credited_at?: string | null
+          id?: string
+          referred_id: string
+          referrer_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          credited_at?: string | null
+          id?: string
+          referred_id?: string
+          referrer_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      rush_overrides: {
+        Row: {
+          active_until: string | null
+          created_at: string
+          id: string
+          level: string
+          park_id: string
+          set_by: string | null
+        }
+        Insert: {
+          active_until?: string | null
+          created_at?: string
+          id?: string
+          level: string
+          park_id: string
+          set_by?: string | null
+        }
+        Update: {
+          active_until?: string | null
+          created_at?: string
+          id?: string
+          level?: string
+          park_id?: string
+          set_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rush_overrides_park_id_fkey"
+            columns: ["park_id"]
+            isOneToOne: false
+            referencedRelation: "parks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ticket_tiers: {
+        Row: {
+          active: boolean
+          adult_price: number
+          child_price: number
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          park_id: string | null
+          perks: Json
+        }
+        Insert: {
+          active?: boolean
+          adult_price: number
+          child_price: number
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          park_id?: string | null
+          perks?: Json
+        }
+        Update: {
+          active?: boolean
+          adult_price?: number
+          child_price?: number
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          park_id?: string | null
+          perks?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ticket_tiers_park_id_fkey"
+            columns: ["park_id"]
+            isOneToOne: false
+            referencedRelation: "parks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transport_options: {
+        Row: {
+          active: boolean
+          base_fare: number
+          capacity: number
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          per_km: number
+        }
+        Insert: {
+          active?: boolean
+          base_fare: number
+          capacity?: number
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          per_km?: number
+        }
+        Update: {
+          active?: boolean
+          base_fare?: number
+          capacity?: number
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          per_km?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallet_accounts: {
+        Row: {
+          balance: number
+          created_at: string
+          id: string
+          referral_code: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          id?: string
+          referral_code: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          id?: string
+          referral_code?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      wallet_transactions: {
+        Row: {
+          amount: number
+          booking_id: string | null
+          created_at: string
+          id: string
+          reason: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          reason: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          reason?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wallet_transactions_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -369,6 +701,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
